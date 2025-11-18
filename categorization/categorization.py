@@ -36,34 +36,50 @@ class DataProcessor:
         
     def load_data(self):
         """Load and remove empty columns from raw CSV"""
-        self.df = pd.read_csv(self.data_path)
-        self.df = self.df.dropna(axis=1, how='all')  # Remove empty columns
-        print(f"✓ Loaded raw data: {self.df.shape}")
-        return self.df
+        # Try different encodings to handle various CSV formats
+        encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
+        for encoding in encodings:
+            try:
+                self.df = pd.read_csv(self.data_path, encoding=encoding)
+                self.df = self.df.dropna(axis=1, how='all')  # Remove empty columns
+                print(f"✓ Loaded raw data: {self.df.shape} (encoding: {encoding})")
+                return self.df
+            except UnicodeDecodeError:
+                continue
+        raise ValueError(f"Could not read CSV with any encoding. Tried: {encodings}")
     
     def clean_data(self):
         """
         Process raw VOC data:
           1. Standardize column names
-          2. Filter VOCs by revalence_index ≥ 80
+          2. Filter VOCs by Revalence Index ≥ 80
           3. Auto-classify samples by microbial load percentiles
           4. Aggregate features per sample
         """
         df_clean = self.df.copy()
         
-        # Standardize column names
+        # Remove empty/unnamed columns
+        df_clean = df_clean.loc[:, ~df_clean.columns.str.contains('^Unnamed')]
+        
+        # Standardize column names (lowercase, strip spaces)
         df_clean.columns = df_clean.columns.str.lower().str.strip()
         
         print(f"Raw records before filtering: {len(df_clean)}")
+        print(f"Columns available: {df_clean.columns.tolist()}")
         
         # Filter by VOC relevance (keep high-quality VOCs)
-        if 'revalence_index' in df_clean.columns:
-            df_clean = df_clean[df_clean['revalence_index'] >= 80]
+        if 'revalence index' in df_clean.columns:
+            df_clean = df_clean[df_clean['revalence index'] >= 80]
             print(f"Records after relevance filter (≥80): {len(df_clean)}")
         
         # Auto-classify based on microbial load percentiles
-        if 'microbial_load' in df_clean.columns or 'microbial_load (log)' in df_clean.columns:
-            load_col = 'microbial_load' if 'microbial_load' in df_clean.columns else 'microbial_load (log)'
+        load_col = None
+        for col in df_clean.columns:
+            if 'microbial' in col.lower() and 'load' in col.lower():
+                load_col = col
+                break
+        
+        if load_col:
             p33, p67 = df_clean[load_col].quantile([0.33, 0.67])
             
             df_clean['class_label'] = pd.cut(
@@ -71,35 +87,41 @@ class DataProcessor:
                 bins=[-np.inf, p33, p67, np.inf],
                 labels=['fresh', 'moderate', 'spoiled']
             )
+            print(f"Classes created from {load_col} (33rd: {p33:.2f}, 67th: {p67:.2f})")
         else:
-            # Fallback: create dummy labels
             df_clean['class_label'] = 'fresh'
+            print("Warning: No microbial load column found, using default 'fresh' label")
         
-        # Aggregate by sample (group by sample_id or row identifier)
+        # Aggregate by sample (group by sample_id)
+        group_cols = [c for c in ['sample_id', 'treatment', 'day', 'replicate '] 
+                     if c in df_clean.columns]
+        
         if 'sample_id' in df_clean.columns:
+            # Group by sample_id primarily
             agg_dict = {
                 'treatment': 'first',
                 'day': 'first',
-                'revalence_index': 'mean',
-                'voc': 'count',  # Becomes voc_count
+                'revalence index': 'mean',
+                'voc': 'count',
                 'class_label': 'first'
             }
             df_agg = df_clean.groupby('sample_id').agg(agg_dict).reset_index()
+        elif group_cols:
+            # Fall back to grouping by treatment+day+replicate
+            agg_dict = {c: 'first' for c in group_cols if c != 'sample_id'}
+            agg_dict['revalence index'] = 'mean'
+            agg_dict['voc'] = 'count'
+            agg_dict['class_label'] = 'first'
+            df_agg = df_clean.groupby(group_cols).agg(agg_dict).reset_index()
         else:
-            # If no sample_id, aggregate by combination of identifying columns
-            group_cols = [c for c in ['treatment', 'day', 'replicate'] if c in df_clean.columns]
-            if group_cols:
-                agg_dict = {c: 'first' for c in group_cols}
-                agg_dict['revalence_index'] = 'mean'
-                agg_dict['voc'] = 'count'
-                agg_dict['class_label'] = 'first'
-                df_agg = df_clean.groupby(group_cols).agg(agg_dict).reset_index()
-            else:
-                df_agg = df_clean
+            df_agg = df_clean
         
         # Rename voc count column
         if 'voc' in df_agg.columns:
             df_agg.rename(columns={'voc': 'voc_count'}, inplace=True)
+        
+        # Standardize column names again for consistency
+        df_agg.columns = df_agg.columns.str.lower().str.strip()
         
         # Create VOC diversity ratio (normalized voc_count)
         if 'voc_count' in df_agg.columns:
@@ -107,19 +129,28 @@ class DataProcessor:
             if voc_max > voc_min:
                 df_agg['voc_diversity_ratio'] = (df_agg['voc_count'] - voc_min) / (voc_max - voc_min)
             else:
-                df_agg['voc_diversity_ratio'] = 0
+                df_agg['voc_diversity_ratio'] = 0.5
         
         self.df_processed = df_agg
         print(f"✓ Processed data: {self.df_processed.shape[0]} samples × {self.df_processed.shape[1]} features")
+        print(f"Features: {self.df_processed.columns.tolist()}")
         return self.df_processed
     
     def get_features(self):
         """Extract feature matrix and target vector"""
-        feature_cols = ['day', 'revalence_index', 'voc_count', 'voc_diversity_ratio', 'treatment']
+        # Map to lowercase standardized names
+        feature_cols = ['day', 'revalence index', 'voc_count', 'voc_diversity_ratio', 'treatment']
         available_cols = [c for c in feature_cols if c in self.df_processed.columns]
+        
+        if not available_cols:
+            print(f"Warning: No feature columns found. Available: {self.df_processed.columns.tolist()}")
+            return None, None
         
         X = self.df_processed[available_cols]
         y = self.df_processed['class_label']
+        
+        print(f"Features selected: {available_cols}")
+        print(f"Feature matrix shape: {X.shape}")
         
         return X, y
 

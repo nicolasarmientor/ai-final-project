@@ -20,10 +20,10 @@ from pathlib import Path
 class VisualizationEngine:
     """Generate and save visualization plots"""
     
-    def __init__(self, models, figure_dir='categorization/figure'):
+    def __init__(self, models, figure_dir='figure'):
         self.models = models
         self.figure_dir = Path(figure_dir)
-        self.figure_dir.mkdir(exist_ok=True)
+        self.figure_dir.mkdir(exist_ok=True, parents=True)
         
         sns.set_style("whitegrid")
         plt.rcParams['figure.figsize'] = (12, 6)

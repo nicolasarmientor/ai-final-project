@@ -21,12 +21,11 @@ Commented placeholders for other models:
 import sys
 from pathlib import Path
 
-# Add project root to path
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# Add current directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
 
-from categorization.categorization import DataProcessor, CategorizationModels
-from categorization.visualization import VisualizationEngine
+from categorization import DataProcessor, CategorizationModels
+from visualization import VisualizationEngine
 
 
 def main():
@@ -42,7 +41,7 @@ def main():
     print("\n[STEP 1] Loading and processing raw VOC data...")
     print("-" * 70)
     
-    processor = DataProcessor(data_path="data/raw_data/DataAI.csv")
+    processor = DataProcessor(data_path="../data/raw_data/DataAI.csv")
     processor.load_data()
     processor.clean_data()
     X, y = processor.get_features()
@@ -102,7 +101,7 @@ def main():
     print("[STEP 6] Saving production model...")
     print("-" * 70)
     
-    models.save_best_model(output_dir='model_pkls')
+    models.save_best_model(output_dir='../model_pkls')
     
     # =========================================================================
     # FINAL SUMMARY
