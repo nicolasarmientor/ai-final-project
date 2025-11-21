@@ -30,3 +30,4 @@ print("\nPredicted class:", pred_class)
 print("\nClass probabilities:")
 for cls, p in zip(classes, pred_prob):
     print(f"  {cls}: {p:.3f}")
+print("")
