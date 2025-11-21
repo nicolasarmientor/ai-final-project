@@ -110,9 +110,17 @@ class ExtendedValidator:
         
         # Create VOC features
         feature_data = []
-        for sample_id in df_samples['sample_id']:
-            sample_vocs = df[df['sample_id'] == sample_id]['voc'].values
-            features = {'sample_id': sample_id}
+        for idx, sample_row in df_samples.iterrows():
+            sample_id = sample_row['sample_id']
+            treatment = sample_row['treatment']
+            
+            # Get all VOCs for this sample across all rows
+            sample_vocs = df[
+                (df['sample_id'] == sample_id) & 
+                (df['treatment'] == treatment)
+            ]['voc'].values
+            
+            features = {'sample_id': sample_id, 'treatment': treatment}
             
             for voc in self.indicator_vocs:
                 features[f'voc_{voc}'] = 1 if voc in sample_vocs else 0

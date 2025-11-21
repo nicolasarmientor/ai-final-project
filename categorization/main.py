@@ -1,6 +1,6 @@
 """
 VOC-Based Chicken Spoilage Categorization
-==========================================
+
 Simple pipeline: Load data -> Create VOC features -> Train RF -> Show results
 """
 
@@ -22,13 +22,17 @@ def main():
     print("VOC-BASED CHICKEN SPOILAGE CATEGORIZATION")
     print("="*70)
     
-    # =========================================================================
+    
     # STEP 1: LOAD AND PROCESS DATA
-    # =========================================================================
+    
     print("\n[STEP 1] Loading raw VOC data...")
     print("-" * 70)
     
-    processor = DataProcessor(data_path="../data/raw_data/DataAI.csv")
+    # Use project root for data path
+    project_root = Path(__file__).parent.parent
+    data_path = project_root / "data" / "raw_data" / "DataAI.csv"
+    
+    processor = DataProcessor(data_path=str(data_path))
     processor.load_data()
     processor.clean_data()
     X, y = processor.get_features()
@@ -36,9 +40,7 @@ def main():
     print(f"Classes: {y.unique()}")
     print(f"Distribution:\n{y.value_counts()}")
     
-    # =========================================================================
     # STEP 2: TRAIN MODEL
-    # =========================================================================
     print("\n" + "="*70)
     print("[STEP 2] Training Random Forest on VOC features...")
     print("-" * 70)
@@ -47,27 +49,21 @@ def main():
     model.prepare_data(X, y)
     model.train()
     
-    # =========================================================================
     # STEP 3: EVALUATE
-    # =========================================================================
     print("\n" + "="*70)
     print("[STEP 3] Evaluating model...")
     print("-" * 70)
     
     model.evaluate()
     
-    # =========================================================================
     # STEP 4: OPTIMIZE THRESHOLD
-    # =========================================================================
     print("\n" + "="*70)
     print("[STEP 4] Optimizing threshold for high spoilage recall...")
     print("-" * 70)
     
     model.optimize_threshold(target_recall=0.95)
     
-    # =========================================================================
     # STEP 5: SHOW TOP PREDICTIVE VOCs
-    # =========================================================================
     print("\n" + "="*70)
     print("[STEP 5] TOP VOCs FOR SPOILAGE PREDICTION")
     print("="*70)
@@ -78,9 +74,7 @@ def main():
         voc_name = row['voc'].replace('voc_', '')
         print(f"  {voc_name:40s}: {row['importance']:.4f}")
     
-    # =========================================================================
     # STEP 6: VISUALIZE
-    # =========================================================================
     print("\n" + "="*70)
     print("[STEP 6] Generating visualizations...")
     print("-" * 70)
@@ -91,18 +85,14 @@ def main():
     viz.plot_feature_importance()
     viz.plot_threshold_optimization()
     
-    # =========================================================================
     # STEP 7: SAVE
-    # =========================================================================
     print("\n" + "="*70)
     print("[STEP 7] Saving model...")
     print("-" * 70)
     
     model.save_model(output_dir='../model_pkls')
     
-    # =========================================================================
     # STEP 8: EXTENDED VALIDATION
-    # =========================================================================
     print("\n" + "="*70)
     print("[STEP 8] Running extended validation on R2 and R3...")
     print("-" * 70)
@@ -111,9 +101,7 @@ def main():
     extended_viz_dir = Path(__file__).parent / 'extended_validation' / 'figures'
     generate_all_visualizations(extended_results, output_dir=str(extended_viz_dir))
     
-    # =========================================================================
     # SUMMARY
-    # =========================================================================
     print("\n" + "="*70)
     print("CATEGORIZATION COMPLETE")
     print("="*70)

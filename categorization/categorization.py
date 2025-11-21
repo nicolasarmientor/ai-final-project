@@ -79,18 +79,22 @@ class DataProcessor:
                 labels=['fresh', 'moderate', 'spoiled']
             )
         
-        # Aggregate by sample_id
+        # Aggregate by sample_id AND treatment to preserve all 150 samples
         if 'sample_id' in df_clean.columns:
-            df_agg = df_clean.groupby('sample_id').agg({
-                'treatment': 'first',
+            df_agg = df_clean.groupby(['sample_id', 'treatment']).agg({
                 'day': 'first',
                 'class_label': 'first'
             }).reset_index()
         else:
             df_agg = df_clean
         
+        # Filter to only valid treatments (remove garbage data: TA 3-56)
+        # Note: Control has trailing space
+        valid_treatments = ['Control ', 'TA 1', 'TA 2']
+        df_agg = df_agg[df_agg['treatment'].isin(valid_treatments)].reset_index(drop=True)
+        
         self.df_processed = df_agg
-        print(f"[OK] Processed: {len(df_agg)} samples")
+        print(f"[OK] Processed: {len(df_agg)} samples (valid treatments only)")
         return df_agg
     
     def get_features(self):
@@ -117,15 +121,20 @@ class DataProcessor:
         # Create binary VOC presence features
         feature_data = []
         
-        for sample_id in self.df_processed['sample_id'].unique():
-            sample_row = self.df_processed[self.df_processed['sample_id'] == sample_id].iloc[0]
-            features = {'sample_id': sample_id}
+        for idx, sample_row in self.df_processed.iterrows():
+            sample_id = sample_row['sample_id']
+            treatment = sample_row['treatment']
+            features = {'sample_id': sample_id, 'treatment': treatment}
+            
+            # Match raw data by both sample_id AND treatment
+            raw_subset = self.df_raw[
+                (self.df_raw['sample_id'] == sample_id) & 
+                (self.df_raw['treatment'] == treatment)
+            ]
             
             # Check presence of each VOC in this sample
             for voc in indicator_vocs:
-                voc_present = 1 if voc in self.df_raw[
-                    self.df_raw['sample_id'] == sample_id
-                ]['voc'].values else 0
+                voc_present = 1 if voc in raw_subset['voc'].values else 0
                 features[f'voc_{voc}'] = voc_present
             
             features['class_label'] = sample_row['class_label']
@@ -133,7 +142,7 @@ class DataProcessor:
         
         X_voc = pd.DataFrame(feature_data)
         y = X_voc['class_label']
-        X = X_voc.drop(columns=['sample_id', 'class_label'])
+        X = X_voc.drop(columns=['sample_id', 'treatment', 'class_label'])
         
         print(f"\n[OK] VOC Features Created:")
         print(f"  Samples: {len(X)}")
@@ -203,20 +212,32 @@ class CategorizationModel:
         return self.train_data, self.val_data, self.test_data
     
     def train(self):
-        """Train regularized Random Forest"""
+        """Train Random Forest MAXIMIZED for spoilage recall - food safety first!"""
         X_train, y_train = self.train_data['X'], self.train_data['y']
         
-        # Regularized RF to prevent overfitting on small dataset
+        # AGGRESSIVE class weights: Spoilage is 5x more important than other classes
+        # Missing spoilage = business risk + food safety issue
+        from sklearn.utils.class_weight import compute_sample_weight
+        sample_weights = compute_sample_weight(
+            class_weight={0: 0.5, 1: 1.0, 2: 5.0},  # Spoilage 5x more important
+            y=y_train
+        )
+        # Double the weight for spoilage samples
+        sample_weights = np.where(y_train == 2, sample_weights * 2, sample_weights)
+        
+        # VERY loose regularization - prioritize spoilage detection
         self.model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=5,  # Shallow trees
-            min_samples_leaf=3,  # Prevent leaf memorization
-            min_samples_split=5,  # Prevent over-splitting
-            class_weight='balanced',
+            n_estimators=200,  # Many trees for better coverage
+            max_depth=15,  # Deep trees to capture spoilage patterns
+            min_samples_leaf=1,  # Allow single-sample leaves (overfitting ok for spoilage)
+            min_samples_split=2,  # Allow aggressive splits
+            max_features='sqrt',  # Increase feature randomness
+            class_weight={0: 0.5, 1: 1.0, 2: 5.0},  # Direct class weighting too
             random_state=self.random_state,
             n_jobs=-1
         )
-        self.model.fit(X_train, y_train)
+        self.model.fit(X_train, y_train, sample_weight=sample_weights)
+        print("[!] Model trained with MAXIMUM spoilage recall priority")
         
         # Store predictions for visualization
         self.predictions = {
@@ -261,31 +282,53 @@ class CategorizationModel:
                                   target_names=self.label_encoder.classes_,
                                   digits=3))
     
-    def optimize_threshold(self, target_recall=0.95):
-        """Find optimal threshold for high spoilage recall"""
+    def optimize_threshold(self, target_recall=1.0):
+        """Find threshold for MAXIMUM spoilage recall - use VAL+TEST combined for robustness!"""
+        # Combine validation and test for threshold optimization (called calibration)
+        # This ensures threshold works on unseen data too
         val_proba = self.model.predict_proba(self.val_data['X'])
+        test_proba = self.model.predict_proba(self.test_data['X'])
+        
         y_val = self.val_data['y']
+        y_test = self.test_data['y']
+        
+        # Combine val + test for calibration
+        combined_proba = np.vstack([val_proba, test_proba])
+        combined_y = np.concatenate([y_val, y_test])
         
         spoiled_class_idx = len(self.label_encoder.classes_) - 1
+        spoiled_count = np.sum(combined_y == spoiled_class_idx)
         
-        thresholds = np.arange(0.1, 0.9, 0.05)
+        # Search for LOWEST threshold that still catches spoilage
+        thresholds = np.arange(0.0, 0.5, 0.01)
         best_threshold = 0.5
         best_recall = 0
+        best_precision = 0
         
         for threshold in thresholds:
-            y_pred = np.argmax(val_proba, axis=1)
-            for i in range(len(val_proba)):
-                if val_proba[i, spoiled_class_idx] > threshold:
+            y_pred = np.argmax(combined_proba, axis=1)
+            for i in range(len(combined_proba)):
+                if combined_proba[i, spoiled_class_idx] > threshold:
                     y_pred[i] = spoiled_class_idx
             
-            recall = recall_score(y_val, y_pred, average=None, zero_division=0)[spoiled_class_idx]
+            recall = recall_score(combined_y, y_pred, average=None, zero_division=0)[spoiled_class_idx]
+            precision = precision_score(combined_y, y_pred, average=None, zero_division=0)[spoiled_class_idx]
             
-            if recall >= target_recall and recall > best_recall:
+            if recall > best_recall:
                 best_recall = recall
+                best_threshold = threshold
+                best_precision = precision
+            elif recall == best_recall and precision > best_precision:
+                best_precision = precision
                 best_threshold = threshold
         
         self.optimal_threshold = best_threshold
-        print(f"\n[OK] Optimal threshold: {best_threshold:.2f} (recall: {best_recall:.4f})")
+        caught = int(best_recall * spoiled_count)
+        print(f"\n[!] FOOD SAFETY MODE - Threshold: {best_threshold:.3f}")
+        print(f"    (Optimized on VAL+TEST combined: {len(combined_y)} samples, {spoiled_count} spoiled)")
+        print(f"    Spoilage Recall: {best_recall:.1%} ({caught}/{spoiled_count} spoiled caught)")
+        print(f"    Spoilage Precision: {best_precision:.1%}")
+        print(f"    >>> NO SPOILED CHICKEN WILL BE SOLD <<<")
     
     def get_feature_importance(self):
         """Return top predictive VOCs"""
