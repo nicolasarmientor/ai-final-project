@@ -46,6 +46,7 @@ plt.title("Actual & Predicted Microbial Load vs Day")
 
 plt.legend()
 plt.tight_layout()
-plt.savefig("linear_regression/figure/linear_regression_plot.png")
+
+# plt.savefig("linear_regression/figure/linear_regression_plot.png")
 
 plt.show()
