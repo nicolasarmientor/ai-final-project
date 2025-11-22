@@ -199,7 +199,7 @@ python multinomial_naive_bayes/naive_bayes_infer.py
 5. Run Random Forest Model
 Execution:
 ```bash
-categorization/main.py
+python categorization/main.py
 ```
 
 ## Contributors
