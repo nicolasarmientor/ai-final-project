@@ -87,3 +87,102 @@ ai-final-project/
             ├── metrics_comparison.png
             └── recall_by_class.png
 ```
+
+## Dataset Summary
+
+The core file `complete_raw_data.csv` contains the raw data from the chicken samples. The samples were exposed to different temperatures over multiple days.
+
+For each sample the most important columns contain the VOCs captured from the machine, the microbial load (log CFU/g), and the freshness category for each measured day.
+
+| Label    | Microbial Load (log CFU/g) |
+|----------|-----------------------------|
+| Fresh    | < 5.0                       |
+| Moderate | 5.0 – 7.0                   |
+| Spoiled  | ≥ 7.0                       |
+
+## Implemented Machine-Learning Models
+
+1. Linear Regression (LRg) - Microbial Load Prediction
+
+Predicts microbial load using:
+- Storage day
+- VOC relevance index
+
+Performance:
+- R2 = 0.93
+- RMSE = 0.47
+- MAE = 0.37
+
+2. Logistic Regression (LR) - Freshness Classification
+
+Uses numeric VOC features:
+- VOC count
+- Relevance index
+- Storage day
+- Treatment type
+
+Performance:
+| Class               | Precision | Recall | F1-Score |
+| ------------------- | --------- | ------ | -------- |
+| Fresh               | 0.99      | 0.94   | 0.97     |
+| Moderate            | 0.91      | 0.98   | 0.94     |
+| Spoiled             | 1.00      | 0.98   | 0.99     |
+| **Accuracy = 0.96** |           |        |          |
+
+3. Multinomial Naïve Bayes (MNB) - VOC Identity Classification
+
+Uses VOC presence/absense as categorical inputs.
+
+Performance:
+| Class               | Precision | Recall | F1-Score |
+| ------------------- | --------- | ------ | -------- |
+| Fresh               | 0.71      | 0.50   | 0.59     |
+| Moderate            | 0.48      | 0.77   | 0.59     |
+| Spoiled             | 1.00      | 0.75   | 0.86     |
+| **Accuracy = 0.63** |           |        |          |
+
+4. Random Forest (RFC) - Biomarker-Based Freshness Estimation
+Trained using 18 curated VOC compounds.
+
+Performance (R1 test set):
+- Accuracy: **56.6%**
+- Spoiled recall: **0.75**
+
+## How to Run the Project
+1. Install dependencies
+`pip install -r requirements.txt`
+2. Run Linear Regression Model
+Training:
+`python linear_regression/linear_regression_train.py`
+Evaluation:
+`python linear_regression/linear_regression_results.py`
+Inference:
+`python linear_regression/linear_regression_infer.py`
+
+3. Run Logistic Regression Model
+Training:
+`python logistic_regression/logistic_regression_train.py`
+Evaluation:
+`python logistic_regression/logistic_regression_results.py`
+Inference:
+`python logistic_regression/logistic_regression_infer.py`
+
+4. Run Naïve Bayes Model
+Training:
+`python multinomial_naive_bayes/naive_bayes_train.py`
+Evaluation:
+`python multinomial_naive_bayes/naive_bayes_results.py`
+Inference:
+`python multinomial_naive_bayes/naive_bayes_infer.py`
+
+5. Run Random Forest Model
+Execution:
+`categorization/main.py`
+
+## Contributors
+| Name                  | Role                          |
+| --------------------- | ----------------------------- |
+| **Vianca Tashiguano** | Data collection, reporting    |
+| **Josué Céspedes**    | Modeling, visualization       |
+| **Nicolás Sarmiento** | Code implementation, modeling |
+
