@@ -156,31 +156,51 @@ pip install -r requirements.txt
 
 2. Run Linear Regression Model
 Training:
-```python linear_regression/linear_regression_train.py```
+```base
+python linear_regression/linear_regression_train.py
+```
 Evaluation:
-```python linear_regression/linear_regression_results.py```
+```bash
+python linear_regression/linear_regression_results.py
+```
 Inference:
-`python linear_regression/linear_regression_infer.py`
+```bash
+python linear_regression/linear_regression_infer.py
+```
 
 3. Run Logistic Regression Model
 Training:
-`python logistic_regression/logistic_regression_train.py`
+```bash
+python logistic_regression/logistic_regression_train.py
+```
 Evaluation:
-`python logistic_regression/logistic_regression_results.py`
+```bash
+python logistic_regression/logistic_regression_results.py
+```
 Inference:
-`python logistic_regression/logistic_regression_infer.py`
+```bash
+python logistic_regression/logistic_regression_infer.py
+```
 
 4. Run Naïve Bayes Model
 Training:
-`python multinomial_naive_bayes/naive_bayes_train.py`
+```bash
+python multinomial_naive_bayes/naive_bayes_train.py
+```
 Evaluation:
-`python multinomial_naive_bayes/naive_bayes_results.py`
+```bash
+python multinomial_naive_bayes/naive_bayes_results.py
+```
 Inference:
-`python multinomial_naive_bayes/naive_bayes_infer.py`
+```bash
+python multinomial_naive_bayes/naive_bayes_infer.py
+```
 
 5. Run Random Forest Model
 Execution:
-`categorization/main.py`
+```bash
+categorization/main.py
+```
 
 ## Contributors
 | Name                  | Role                          |
