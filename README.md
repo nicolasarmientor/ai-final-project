@@ -150,7 +150,10 @@ Performance (R1 test set):
 
 ## How to Run the Project
 1. Install dependencies
-```pip install -r requirements.txt```
+```bash
+pip install -r requirements.txt
+```
+
 2. Run Linear Regression Model
 Training:
 ```python linear_regression/linear_regression_train.py```
